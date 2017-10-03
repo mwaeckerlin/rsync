@@ -10,7 +10,11 @@ large volumes (several TB).
 Usage
 -----
 
-Synchronize `/var/lib/m,ysql` from a mysql database docker container
+Basic usage is `docker run --rm mwaeckerlin/rsync`, `--rm` to remove
+the temporary container after synchronization. Then mount some volumes
+and add from and to parameters for the synchronization:
+
+Synchronize `/var/lib/mysql` from a mysql database docker container
 to a local directory in `/tmp/target`:
 
     docker run -d --name mysql -e MYSQL_ROOT_PASSWORD=secret mysql

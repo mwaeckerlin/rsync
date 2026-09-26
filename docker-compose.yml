@@ -1,0 +1,34 @@
+# Builds the three images. `npm start` synchronises the volume `source` into
+# the volume `target` once, on every change with the watching variant, and
+# every hour with the cron variant.
+services:
+  rsync:
+    image: mwaeckerlin/rsync
+    build: .
+    command: ["/source/", "/target/"]
+    volumes:
+      - source:/source
+      - target:/target
+
+  rsync-inotify:
+    image: mwaeckerlin/rsync:inotify
+    build:
+      context: .
+      dockerfile: Dockerfile.inotify
+    command: ["/source/", "/target/"]
+    volumes:
+      - source:/source
+      - target:/target
+
+  rsync-cron:
+    image: mwaeckerlin/rsync:cron
+    build:
+      context: .
+      dockerfile: Dockerfile.cron
+    volumes:
+      - source:/source
+      - target:/target
+
+volumes:
+  source:
+  target:

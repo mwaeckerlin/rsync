@@ -1,0 +1,38 @@
+# compile stage - the shell-free entrypoint
+FROM mwaeckerlin/very-base AS init
+RUN $PKG_INSTALL g++
+COPY rsync-watch.cpp .
+RUN g++ -static -Os -flto=auto -fno-rtti -ffunction-sections -fdata-sections \
+        -Wl,--gc-sections -Wl,-s -std=c++20 -Wall -Wextra -Werror \
+        -o rsync-watch rsync-watch.cpp
+RUN strip -s -R .comment -R .gnu.version --strip-unneeded rsync-watch
+
+# build stage - collect rsync, inotifywait and their libraries
+FROM mwaeckerlin/very-base AS build
+RUN $PKG_INSTALL rsync inotify-tools
+COPY --from=init rsync-watch /usr/bin/rsync-watch
+
+# empty mount points that belong to the unprivileged user, so that a new
+# named volume mounted there is writable for the container
+RUN mkdir /source /target
+RUN $ALLOW_USER /source /target
+
+# create /root with only the executables and their dependencies
+# (paths relative to / so that tar has no leading slash to warn about; musl's
+# ldd lists the libraries of its first argument only, hence one call per file)
+RUN tar cph -C / \
+        source target \
+        usr/bin/rsync usr/bin/inotifywait usr/bin/rsync-watch \
+        $(for f in /usr/bin/rsync /usr/bin/inotifywait; do ldd $f; done \
+          | sed -n 's,.* => /\([^ ]*\) .*,\1,p' | sort -u) \
+    | tar xpC /root/
+
+
+# now create a minimalistic image from scratch
+FROM mwaeckerlin/scratch
+ENV CONTAINERNAME="rsync-inotify" \
+    RSYNC_OPTIONS="-avP --delete" \
+    WATCH="" \
+    DELAY="2"
+ENTRYPOINT ["/usr/bin/rsync-watch"]
+COPY --from=build /root/ /

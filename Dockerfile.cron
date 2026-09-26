@@ -1,0 +1,25 @@
+# build stage - collect rsync and its libraries
+FROM mwaeckerlin/very-base AS build
+RUN $PKG_INSTALL rsync
+
+# empty mount points that belong to the unprivileged user, so that a new
+# named volume mounted there is writable for the container
+RUN mkdir /source /target
+RUN $ALLOW_USER /source /target
+
+# create /root with only the rsync executable and its dependencies
+# (paths relative to / so that tar has no leading slash to warn about)
+RUN tar cph -C / \
+        source target usr/bin/rsync \
+        $(ldd /usr/bin/rsync | sed -n 's,.* => /\([^ ]*\) .*,\1,p') \
+    | tar xpC /root/
+
+
+# the headless cron image with rsync and its schedule; cron fills the
+# environment into the crontab
+FROM mwaeckerlin/cron
+ENV CONTAINERNAME="rsync-cron" \
+    RSYNC_SCHEDULE="0 * * * *" \
+    RSYNC_OPTIONS="-avP --delete"
+COPY --from=build /root/ /
+COPY cron.d/rsync /etc/cron.d/rsync

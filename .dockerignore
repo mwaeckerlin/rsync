@@ -1,0 +1,9 @@
+.dockerignore
+.gitignore
+.git
+tests
+*.md
+docker-compose.yml
+package.json
+LICENSE
+*~

@@ -1,0 +1,5 @@
+# synchronise /source/ into /target/ at the start of the container and on the
+# schedule RSYNC_SCHEDULE, with the options RSYNC_OPTIONS; cron fills in both
+# from the environment of the container
+@reboot            rsync ${RSYNC_OPTIONS} /source/ /target/
+${RSYNC_SCHEDULE}  rsync ${RSYNC_OPTIONS} /source/ /target/

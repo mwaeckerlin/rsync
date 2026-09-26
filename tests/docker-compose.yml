@@ -1,0 +1,137 @@
+# End-to-end stack for the three images, driven by tests/run-e2e.sh.
+#
+# Every service of the watching variant has volumes of its own, so one test
+# cannot trigger another. `helper` is a foreign alpine image, used only to
+# write and read files in the volumes; it runs as the unprivileged user of the
+# images under test (RUN_UID/RUN_GID are read from the image by run-e2e.sh).
+# The images under test create the volumes, so each volume starts with the
+# ownership of the image's mount point — which is what a deployment sees.
+
+name: rsync-tests
+
+services:
+
+  once:
+    image: mwaeckerlin/rsync
+    profiles: [manual]
+    volumes:
+      - once-source:/source
+      - once-target:/target
+
+  watch:
+    image: mwaeckerlin/rsync:inotify
+    command: ["/source/", "/target/"]
+    volumes:
+      - watch-source:/source
+      - watch-target:/target
+
+  watch-dir:
+    image: mwaeckerlin/rsync:inotify
+    command: ["/source/", "/target/"]
+    environment:
+      WATCH: /source/only
+    volumes:
+      - dir-source:/source
+      - dir-target:/target
+
+  watch-opts:
+    image: mwaeckerlin/rsync:inotify
+    command: ["/source/", "/target/"]
+    environment:
+      RSYNC_OPTIONS: "-a"
+    volumes:
+      - opts-source:/source
+      - opts-target:/target
+
+  # the destination lies in / which the unprivileged user cannot write
+  watch-fail:
+    image: mwaeckerlin/rsync:inotify
+    command: ["/source/", "/unwritable/"]
+    volumes:
+      - fail-source:/source
+
+  # rsync daemon: the configuration is written by the helper into the volume
+  # on /source, the module stores into the volume on /target
+  daemon:
+    image: mwaeckerlin/rsync
+    entrypoint: ["/usr/bin/rsync"]
+    command: ["--daemon", "--no-detach", "--port=8873", "--config=/source/rsyncd.conf"]
+    volumes:
+      - daemon-conf:/source
+      - daemon-data:/target
+
+  # the cron variant with its defaults: at start and every hour
+  cron:
+    image: mwaeckerlin/rsync:cron
+    volumes:
+      - cron-source:/source
+      - cron-target:/target
+
+  # the cron variant configured through the environment: every minute,
+  # without deleting in the destination
+  cron-minute:
+    image: mwaeckerlin/rsync:cron
+    environment:
+      RSYNC_SCHEDULE: "* * * * *"
+      RSYNC_OPTIONS: "-a"
+    volumes:
+      - minute-source:/source
+      - minute-target:/target
+
+  # an image derived from the cron variant with its own crontab, as the README
+  # shows it for other paths
+  cron-own:
+    image: mwaeckerlin/rsync-tests-cron-own
+    build: own
+    volumes:
+      - own-source:/source
+      - own-target:/target
+
+  watch-bare:
+    image: mwaeckerlin/rsync:inotify
+    profiles: [manual]
+
+  helper:
+    image: alpine
+    # set by run-e2e.sh; empty (and refused by docker) when the stack is
+    # started any other way, while `down` still works for the cleanup
+    user: "${RUN_UID:-}:${RUN_GID:-}"
+    entrypoint: ["sleep", "infinity"]
+    init: true
+    volumes:
+      - once-source:/once/source
+      - once-target:/once/target
+      - watch-source:/watch/source
+      - watch-target:/watch/target
+      - dir-source:/dir/source
+      - dir-target:/dir/target
+      - opts-source:/opts/source
+      - opts-target:/opts/target
+      - fail-source:/fail/source
+      - daemon-conf:/daemon/conf
+      - daemon-data:/daemon/data
+      - cron-source:/cron/source
+      - cron-target:/cron/target
+      - minute-source:/minute/source
+      - minute-target:/minute/target
+      - own-source:/own/source
+      - own-target:/own/target
+
+volumes:
+  own-source:
+  own-target:
+  cron-source:
+  cron-target:
+  minute-source:
+  minute-target:
+  daemon-conf:
+  daemon-data:
+  once-source:
+  once-target:
+  watch-source:
+  watch-target:
+  dir-source:
+  dir-target:
+  opts-source:
+  opts-target:
+  fail-source:

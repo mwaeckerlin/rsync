@@ -1,0 +1,2 @@
+# every minute, from a subdirectory of the source, without deleting
+* * * * * rsync -a /source/sub/ /target/

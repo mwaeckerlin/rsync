@@ -30,17 +30,24 @@ The e2e stack (`tests/docker-compose.yml`) gives every long-running service of t
 - **F15** `tests/run-e2e.sh` › cron_invalid_schedule_is_refused — `RSYNC_SCHEDULE=61 * * * *` ends with a non-zero exit code and names `/etc/cron.d/rsync:5`.
 - **F15** `tests/run-e2e.sh` › cron_environment_schedule_runs — a container with `RSYNC_SCHEDULE=* * * * *` and `RSYNC_OPTIONS=-a` brings a new file within two minutes and keeps a file only the destination has.
 - **F16** `tests/run-e2e.sh` › cron_own_crontab_replaces_the_default — an image derived with its own crontab that synchronises `/source/sub/` every minute brings a file of that directory within two minutes.
+- **F17** `tests/run-e2e.sh` › once_options_from_environment — with `RSYNC_OPTIONS=-a` a new file arrives and a file only the destination has stays, because `--delete` is gone.
+- **F18** `tests/run-e2e.sh` › daemon_modules_from_environment — a daemon with `RSYNCD_MODULES=data=/target:rw files=/source` receives a directory that `mwaeckerlin/rsync` pushes to `rsync://daemon-env:8873/data/`.
+- **F18** `tests/run-e2e.sh` › daemon_read_only_module_refuses_a_push, daemon_read_only_module_serves_its_files — a push into the module `files` without `:rw` fails and leaves its files as they are; a pull from it brings its file.
+- **F18** `tests/run-e2e.sh` › daemon_configuration_is_logged — the container log shows both modules with their paths and `read only = no` and `read only = yes`.
+- **F18** `tests/run-e2e.sh` › daemon_invalid_modules_are_refused — an entry with a newline and a parameter or a section after it, a relative path, a `;` in the path, the mode `:rx`, a name with a space, the name `global` and a name given twice each end the container with a non-zero exit code and `invalid RSYNCD_MODULES entry`, before a daemon starts.
 
 ## Image contract (`tests/image-contract.sh`)
 
-- **F1** `tests/image-contract.sh` › default_options — the entrypoint of `mwaeckerlin/rsync` is `rsync -avP --delete`.
+- **F1** `tests/image-contract.sh` › init_entrypoint — `mwaeckerlin/rsync` starts `/usr/bin/init`, which runs rsync with the default options of F17.
 - **F3** `tests/image-contract.sh` › _no_interpreter, no_package_manager, unprivileged_user — no `sh`, `bash`, `busybox` or `perl` starts, `apk` is absent, and all three images run as `somebody`.
-- **F3** `tests/image-contract.sh` › holds_rsync, holds_inotifywait, holds_entrypoint, entrypoint — the programs are in the images, and the watching image starts `rsync-watch`.
+- **F3** `tests/image-contract.sh` › holds_rsync, holds_init, holds_inotifywait, holds_entrypoint, entrypoint — the programs are in the images, and the watching image starts `rsync-watch`.
 - **F3** `tests/image-contract.sh` › starts_rsync, starts_inotifywait — `rsync` and `inotifywait` start in the images, so none of their libraries is missing.
 - **F4** `tests/image-contract.sh` › source_writable, target_writable — `/source` and `/target` belong to the uid and gid of `somebody`.
 - **F14** `tests/image-contract.sh` › holds_cron, holds_schedule, cron_entrypoint — the cron variant carries the cron program and `/etc/cron.d/rsync`, and starts `cron`.
 - **F15** `tests/image-contract.sh` › default_schedule, default_cron_options — the image carries `RSYNC_SCHEDULE=0 * * * *` and `RSYNC_OPTIONS=-avP --delete`.
+- **F17** `tests/image-contract.sh` › default_options — `mwaeckerlin/rsync` carries `RSYNC_OPTIONS=-avP --delete`.
+- **F18** `tests/image-contract.sh` › default_modules, daemon_directory_writable — `mwaeckerlin/rsync` carries `RSYNCD_MODULES` empty, and `/run/rsyncd` with the mode `1777`, so the configuration is written under every `--user`.
 
 ## Docs contract (`tests/docs-contract.sh`)
 
-- **F1–F16** `tests/docs-contract.sh` › unique_feature_numbers, every_feature_tested, no_dangling_references, every_listed_test_exists, no_skipped_tests — every feature of `FEATURES.md` carries an entry here, every number used here exists as a feature, every test named here exists, no number is defined twice and no test is left out.
+- **F1–F18** `tests/docs-contract.sh` › unique_feature_numbers, every_feature_tested, no_dangling_references, every_listed_test_exists, no_skipped_tests — every feature of `FEATURES.md` carries an entry here, every number used here exists as a feature, every test named here exists, no number is defined twice and no test is left out.

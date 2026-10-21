@@ -60,6 +60,16 @@ services:
       - daemon-conf:/source
       - daemon-data:/target
 
+  # rsync daemon configured from the environment: a writable module on
+  # /target and a read-only one on /source
+  daemon-env:
+    image: mwaeckerlin/rsync
+    environment:
+      RSYNCD_MODULES: "data=/target:rw files=/source"
+    volumes:
+      - daemon-env-source:/source
+      - daemon-env-data:/target
+
   # the cron variant with its defaults: at start and every hour
   cron:
     image: mwaeckerlin/rsync:cron
@@ -110,6 +120,8 @@ services:
       - fail-source:/fail/source
       - daemon-conf:/daemon/conf
       - daemon-data:/daemon/data
+      - daemon-env-source:/denv/source
+      - daemon-env-data:/denv/data
       - cron-source:/cron/source
       - cron-target:/cron/target
       - minute-source:/minute/source
@@ -126,6 +138,8 @@ volumes:
   minute-target:
   daemon-conf:
   daemon-data:
+  daemon-env-source:
+  daemon-env-data:
   once-source:
   once-target:
   watch-source:

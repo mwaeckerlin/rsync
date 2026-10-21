@@ -1,6 +1,6 @@
 {
   "name": "@mwaeckerlin/rsync",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "description": "Headless rsync images: synchronise volumes once, or whenever inotify reports a change",
   "private": true,
   "scripts": {

@@ -3,9 +3,10 @@
 #
 # A production image must contain nothing that lets an attacker who reaches
 # code execution pivot: no shell, no perl, no busybox, no package manager. The
-# images ship rsync (the inotify variant also inotifywait and its entrypoint,
-# the cron variant the cron program and its schedule), their libraries, and
-# two empty mount points — nothing else.
+# images ship rsync (the single run its entrypoint and the directory of the
+# daemon configuration, the inotify variant also inotifywait and its
+# entrypoint, the cron variant the cron program and its schedule), their
+# libraries, and two empty mount points — nothing else.
 #
 # The interpreter checks run the interpreter as the container entrypoint
 # instead of asking the image to look at its own filesystem: a headless image
@@ -103,6 +104,17 @@ _owned_by_user() {
     fi
 }
 
+# a directory carries exactly this mode, as `tar -tv` prints it
+_mode() {
+    local image="$1" path="$2" expected="$3" name="$4" mode
+    mode=$(echo "${CONTENTS}" | awk -v p="${path}" '$NF == p {print $1}')
+    if [[ "${mode}" == "${expected}" ]]; then
+        _pass "${image}_${name}"
+    else
+        _fail "${image}_${name}" "${path} has mode '${mode}' instead of ${expected}"
+    fi
+}
+
 _inspect() {
     local image="$1" format="$2" expected="$3" name="$4" actual
     actual=$(docker inspect --format "${format}" "${image}")
@@ -145,7 +157,12 @@ done
 
 image=mwaeckerlin/rsync
 if _image_exists "${image}"; then
-    _inspect "${image}" '{{json .Config.Entrypoint}}' '["/usr/bin/rsync","-avP","--delete"]' default_options
+    CONTENTS=$(_contents "${image}")
+    _holds   "${image}" usr/bin/init holds_init
+    _inspect "${image}" '{{json .Config.Entrypoint}}' '["/usr/bin/init"]' init_entrypoint
+    _env     "${image}" "RSYNC_OPTIONS=-avP --delete" default_options
+    _env     "${image}" "RSYNCD_MODULES=" default_modules
+    _mode    "${image}" run/rsyncd/ drwxrwxrwt daemon_directory_writable
 fi
 
 image=mwaeckerlin/rsync:inotify

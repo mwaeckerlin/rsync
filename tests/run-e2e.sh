@@ -75,7 +75,7 @@ cleanup
 # the images under test create their volumes first, so the helper, which
 # mounts the same volumes, finds them with the ownership of the images
 _once --version > /dev/null || { echo "mwaeckerlin/rsync does not start"; exit 1; }
-"${COMPOSE[@]}" create --build watch watch-dir watch-opts watch-fail daemon cron cron-minute cron-own > /dev/null 2>&1
+"${COMPOSE[@]}" create --build watch watch-dir watch-opts watch-fail daemon daemon-env cron cron-minute cron-own > /dev/null 2>&1
 "${COMPOSE[@]}" up -d helper > /dev/null 2>&1
 
 echo "==> mwaeckerlin/rsync"
@@ -101,6 +101,13 @@ _h 'echo extra > /once/target/extra.txt'
 _check once_own_options_replace_the_defaults '_h "[ -f /once/target/c.txt ] && [ -f /once/target/extra.txt ]"' \
     "without --delete extra.txt must stay and c.txt must arrive"
 
+_h 'echo env > /once/source/env.txt'
+"${COMPOSE[@]}" run --rm -T -e "RSYNC_OPTIONS=-a" once /source/ /target/ > /dev/null 2>&1
+rc=$?
+_check once_options_from_environment \
+    '[[ $rc -eq 0 ]] && _h "[ -f /once/target/env.txt ] && [ -f /once/target/extra.txt ]"' \
+    "exit code ${rc}, or env.txt did not arrive, or extra.txt was deleted although RSYNC_OPTIONS=-a has no --delete"
+
 # a directory that only a foreign user may read: 700 and 600, owned by 4321
 _h 'chmod 777 /once/source /once/target'
 _h_as "${FOREIGN}" 'mkdir /once/source/foreign && echo secret > /once/source/foreign/secret && chmod 600 /once/source/foreign/secret && chmod 700 /once/source/foreign'
@@ -115,16 +122,57 @@ _check once_runs_as_the_owner_of_the_data \
 
 _h 'printf "log file = /dev/stdout\n[data]\npath = /target\nread only = no\nuse chroot = no\n" > /daemon/conf/rsyncd.conf'
 "${COMPOSE[@]}" start daemon > /dev/null 2>&1
+# push /source/dir/ to the module $1, again until the daemon has started
 _push() {
     local i
     for ((i = 0; i < LIMIT; i++)); do
-        _once /source/dir/ rsync://daemon:8873/data/ > /dev/null 2>&1 && return 0
+        _once /source/dir/ "$1" > /dev/null 2>&1 && return 0
         sleep 1
     done
     return 1
 }
-_check daemon_receives_a_push '_push && _h "[ \"\$(cat /daemon/data/b.txt)\" = beta ]"' \
+_check daemon_receives_a_push '_push rsync://daemon:8873/data/ && _h "[ \"\$(cat /daemon/data/b.txt)\" = beta ]"' \
     "the daemon did not accept the push, or b.txt did not arrive"
+
+_h 'echo served > /denv/source/served.txt'
+"${COMPOSE[@]}" start daemon-env > /dev/null 2>&1
+_check daemon_modules_from_environment '_push rsync://daemon-env:8873/data/ && _h "[ \"\$(cat /denv/data/b.txt)\" = beta ]"' \
+    "the writable module data of RSYNCD_MODULES did not accept the push, or b.txt did not arrive"
+
+_once /source/dir/ rsync://daemon-env:8873/files/ > /dev/null 2>&1
+rc=$?
+_check daemon_read_only_module_refuses_a_push \
+    '[[ $rc -ne 0 ]] && _h "[ ! -e /denv/source/b.txt ] && [ -f /denv/source/served.txt ]"' \
+    "exit code ${rc}: the read-only module files accepted the push, or lost served.txt"
+
+_once rsync://daemon-env:8873/files/ /target/pulled/ > /dev/null 2>&1
+rc=$?
+_check daemon_read_only_module_serves_its_files \
+    '[[ $rc -eq 0 ]] && _h "[ \"\$(cat /once/target/pulled/served.txt)\" = served ]"' \
+    "exit code ${rc}, or served.txt of the read-only module files did not arrive"
+
+out=$("${COMPOSE[@]}" logs --no-log-prefix daemon-env 2>&1)
+_check daemon_configuration_is_logged \
+    '[[ "${out}" == *"[data]"*"path = /target"*"read only = no"*"[files]"*"path = /source"*"read only = yes"* ]]' \
+    "the log does not show the configuration of RSYNCD_MODULES: ${out}"
+
+# every value is refused before the daemon starts; the limit ends a daemon
+# that started although it should not have
+_modules_refused() {
+    local value out rc
+    for value in "$@"; do
+        out=$(timeout "${LIMIT}" "${COMPOSE[@]}" run --rm -T -e "RSYNCD_MODULES=${value}" daemon-env 2>&1)
+        rc=$?
+        if [[ $rc -eq 0 || $rc -eq 124 || "${out}" != *"invalid RSYNCD_MODULES entry"* ]]; then
+            echo "    ${value@Q}: exit code ${rc}: ${out}"
+            return 1
+        fi
+    done
+}
+_modules_refused $'data=/target\nuid = 0' $'data=/target\n[evil]' 'data=target' 'data=/target;x' \
+    'data=/target:rx' 'da ta=/target' 'global=/target' 'data=/target data=/source'
+rc=$?
+_check daemon_invalid_modules_are_refused '[[ $rc -eq 0 ]]' "a value of RSYNCD_MODULES was not refused"
 
 echo "==> mwaeckerlin/rsync:cron"
 

@@ -1,5 +1,9 @@
 # Changelog
 
+- 2026-10-22 **1.3.2**
+    - `mwaeckerlin/rsync` takes its options from `RSYNC_OPTIONS`, as the watching and the scheduled variant do, default `-avP --delete`
+    - `mwaeckerlin/rsync` serves an rsync daemon with the modules of `RSYNCD_MODULES`, without a configuration file to mount; an entry that could add parameters of its own is refused at start, and a mounted configuration keeps working
+
 - 2026-09-26 **1.3.1**
     - The image is headless: it contains rsync and its libraries only, without a shell, an interpreter or a package manager, and it runs as an unprivileged user instead of root
     - Data that only its owner may read is synchronised by running the container as that owner with `--user`; the README explains when root would be needed and what it costs
